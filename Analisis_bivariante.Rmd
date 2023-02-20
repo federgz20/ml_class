@@ -1,0 +1,285 @@
+---
+title: "Analisis_bivariante"
+author: "Federico Rodríguez"
+date: "2023-02-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importar datos
+
+```{r}
+data <- read.csv("C:/Users/feder/OneDrive - alumni.unav.es/Escritorio/Máster/Machine Learning I/heart_mod_2023-02-08.csv", sep = "p")
+```
+
+## Renombrar variables
+
+Empezamos separando las variables numéricas de las categóricas. Las categóricas las pasamos a factores.
+
+```{r}
+sapply(data, class)
+
+data$sex <- as.factor(data$sex)
+levels(data$sex) <- c("Female","Male")
+
+data$cp <- as.factor(data$cp) # Chest pain type (4 types)
+levels(data$cp) <- c("Asymptomatic", "Atypical angina", "No angina", "Typical angina")
+
+data$fbs <- as.factor(data$fbs)
+levels(data$fbs) <- c("No","Yes")
+
+data$restecg <- as.factor(data$restecg)
+levels(data$restecg) <- c("Hypertrophy","Normal","Abnormalities")
+
+data$exang <- as.factor(data$exang)
+levels(data$exang) <- c("No","Yes")
+
+data$slope <- as.factor(data$slope)
+levels(data$slope) <- c("Descending","Flat","Ascending")
+
+data$thal <- as.factor(data$thal)
+levels(data$thal) <- c("Fixed defect", "Normal flow", "Reversible defect")
+
+data$target <- as.character(data$target)
+
+data$target[which(data$target == "11")] <- "1" 
+data$target[which(data$target == "O")] <- "0" 
+
+table(data$target) 
+
+data$target <- as.factor(data$target)
+levels(data$target) <- c("Yes","No") 
+```
+
+## Separar variables numericas y factoriales
+
+```{r}
+names(data)
+data <- data[,-1]
+
+type_class <- sapply(data,class)
+table(type_class)
+
+data$oldpeak <- gsub(",",".",data$oldpeak)
+data$oldpeak <- as.numeric(data$oldpeak)
+table(type_class)
+
+data$chol <- as.numeric(data$chol)
+type_class <- sapply(data,class)
+
+data_num <- data[,type_class %in% c("integer","numeric")]
+data_fac <- data[,type_class %in% c("factor")]
+```
+
+## Adecuar datos extremos o valores erróneos
+
+```{r}
+
+summary(data_num)
+
+tail(sort(data_num$age)) 
+
+data_num$age[data_num$age == "640"] <- 64
+data_num$age[data_num$age == "630"] <- 63
+data_num$age[data_num$age == "350"] <- 35
+
+data_num$chol[which(data_num$chol == "5")] <- NA
+
+data_num$trestbps[data_num$trestbps == "1540"] <- 154
+
+#Calculamos la media de cada variable y sustituimos los NA por la media calculada
+
+#mean_oldpeak <- mean(data$oldpeak, na.rm = T)
+#data_num$oldpeak[is.na(data_num$oldpeak)] <- mean_oldpeak
+
+mean_trestbps <- mean(data$trestbps, na.rm = T)
+data_num$trestbps[is.na(data_num$trestbps)] <- mean_trestbps
+
+mean_thalach <- mean(data$thalach, na.rm = T)
+data_num$thalach[is.na(data_num$thalach)] <- mean_thalach
+
+mean_ca <- mean(data$ca, na.rm = T)
+data_num$ca[is.na(data_num$ca)] <- mean_ca
+
+#mean_age <- mean(data$age, na.rm = T)
+#data_num$age[is.na(data_num$age)] <- mean_age
+
+mean_chol <- mean(data$chol, na.rm = T)
+data_num$chol[is.na(data_num$chol)] <- mean_chol
+
+```
+
+## Centralizar y normalizar datos numéricos
+
+```{r}
+centr_norm <- function(var = NULL)
+  {
+  mean <- mean(var, na.rm = T)
+  centr <- var-mean
+  SD <- sd(var, na.rm = T)
+  norm <- centr/SD
+  return(norm)
+}
+
+#Añadir columnas a data_num con los nuevos datos corregidos
+
+for(g in names(data_num))
+{
+  data_num[paste0(g,"_corr")] <- centr_norm(data_num[,g])
+}
+```
+
+## Analisis bivariante respecto la variable target
+
+### [Analisis descriptivo y plots]{.underline}
+
+#### Variables numéricas
+
+Se han representado con diagramas de cajas y bigotes cada variable numérica según la variable "target", la cual nos indica si el individuo presenta o no enfermedad cardiaca.
+
+A primera vista, en todos los casos, se obtiene un valor más alto para los individuos que sí presentan la enfermedad. Esto nos indica que, aparentemente, poseer un valor mayor de estas variables suponen un factor de riesgo a padecer la enfermedad. Más tarde, podremos corroborar si la hipótesis es cierta, mediante test estadísticos.
+
+En orden de izquierda a derecha, de arriba a abajo, observamos que la edad es un factor de riesgo a padecer la enfermedad cardíaca (mayor edad, mayor probabilidad de padecer enfermedad). Vemos también que los pacientes enfermos poseen una presión sanguínea en reposo mayor, así como su nivel de colesterol es mayor. Los individuos enfermos presentan un ritmo cardíaco máximo mayor, pudiendo indicar que existe un esfuerzo cardiaco mayor. Lo mismo ocurre con la depresión del intervalo ST producida al realizar ejercicio, esta depresión es mayor en enfermos. Por último, los enfermos poseen un mayor número de vasos teñidos por fluoroscopía, pues son teñidos en la prueba de estrés nuclear, indicándonos que los individuos que padecen enfermedad presentan un mayor estrés y esfuerzo cardiaco.
+
+Por otro lado, hay que tener en cuenta también los bigotes de los gráficos y los valores outlayers, que se encuentran presentes prácticamente en todos los casos de pacientes sanos, indicando que en estos casos la variabilidad es mucho mayor que en los enfermos.
+
+```{r, fig.height=9}
+
+#Vamos a incluir la variable target en la tabla de var. numéricas para facilitar el análisis
+
+data_num$target <- data_fac$target
+
+pvalue_num <- data.frame(matrix(NA, byrow = T, ncol=6, nrow= 1))
+
+par(mfrow = c(4,2))
+for(i in 7:12)
+  {
+  boxplot(data_num[,i],data_num$target, 
+          main = paste(colnames(data_num[i])), 
+          ylim = c(-4,5), names = c("No","Yes"), xlab = "Heart Disease",
+          cex.main = 2, cex.axis = 1.5, cex.lab = 1.8)
+  pvalue_num[,i-6] <- round(t.test(data_num[,i]~data_num$target)$p.value,7)
+}
+
+pvalue_num <- t(pvalue_num)
+```
+
+#### Variables categóricas
+
+Para las variables categóricas es conveniente representar los resultados mediante gráficos de barras, en los que cada barra represente los distintos niveles de la variable.
+
+Se han organizado las gráficas de la siguiente forma, en primer lugar, se representan las ocho variables en ocho gráficas distintas en forma de proporción para los individuos enfermos, en segundo lugar, encontramos las gráficas correspondientes a los individuos sanos. Las comparaciones se irán haciendo entre los dos grupos de gráficas.
+
+Así mismo, las gráficas de color rojo representan una relación estadísticamente significativa entre padecer una enfermedad cardiaca y la variable estudiada en cada caso.
+
+En cuanto a la variable sexo, podemos ver que, ante estos datos, aproximadamente el 80% de los enfermos son hombres. Mientras que en los sanos se encuentra una proporción más equitativa. En cuanto al dolor de pecho (angina de pecho), los enfermos se caracterizan por ser asintomáticos, mientras los sanos no tienen angina o algunos son asintomáticos. En ambos casos la glucosa en ayuna no es mayor de 120 mg/dl en el 80% aproximadamente.
+
+Si nos fijamos en la variable restecg, que refiere al electrocardiograma (ecg) en reposo, al comparar entre sanos y enfermos, en estos últimos hay menos sujetos con un ecg normal y predominan aquellos con alguna hipertrofia, también hay algún que otro caso más de ecg con anormalidades. La prueba de angina por esfuerzo (variable exang) es bastante clara, pues los individuos enfermos presentan predominantemente angina de pecho tras realizar ejercicio, mientras que en los sanos, más del 80% no presentan este dolor.
+
+Del mismo modo, se puede ver en la curva del segmento ST tras ejercicio (variable slope), lo normal es que tienda a ser ascendente, esto puede corroborarse con nuestros datos de pacientes sanos, mientras que en los pacientes enfermos se aprecia una predominancia de una curva que se mantiene plana. Por último, en la variable thal, los individuos sanos presentan un flujo normal en la mayoría de casos, mientras que en los enfermos predomina un efecto reversible.
+
+```{r, fig.height=9}
+
+par(mfrow = c(4,2))
+for(i in 1:length(data_fac)){
+    tab <- table(data_fac[,8],data_fac[,i])
+    proptab <- prop.table(tab,margin = 1)
+    pvalue <- round(chisq.test(tab)$p.value,5)
+    color_cond <- ifelse(pvalue < 1e-3, 2, 4) #En rojo es significativo
+    barplot(proptab[1,], horiz = TRUE, xlim = c(0, 1),
+            main = paste(colnames(data_fac[i]),",","p-value=",pvalue),
+            col = color_cond,cex.main = 2, cex.axis = 1.5, cex.lab = 1.8)
+}
+```
+
+```{r, fig.height=9}
+
+par(mfrow = c(4,2))
+for(i in 1:length(data_fac)){
+    tab <- table(data_fac[,8],data_fac[,i]) 
+    proptab <- prop.table(tab,margin = 1)
+    pvalue <- round(chisq.test(tab)$p.value,5)
+    color_cond <- ifelse(pvalue < 1e-3, 2, 4)
+    barplot(proptab[2,], horiz = TRUE, xlim = c(0, 1),
+            main = paste(colnames(data_fac[i]),",","p-value=",pvalue),
+            col = color_cond,cex.main = 2, cex.axis = 1.5, cex.lab = 1.8)
+}
+```
+
+En este instante, calculamos los p-valores correspondientes a las variables categóricas, obtenidos por un test de chi cuadrado.
+
+```{r}
+pvalue_fac <- data.frame(matrix(NA, byrow = T, ncol=8, nrow= 1))
+for(d in 1:length(data_fac)){
+    tab <- table(data_fac[,8],data_fac[,d]) 
+    pvalue_fac[1,d]<- round(chisq.test(tab)$p.value,5)
+}
+
+pvalue_fac <- t(pvalue_fac)
+```
+
+En esta parte, calculamos los p-valores de las variables numéricas y categóricas obtenidos de la modelización.
+
+```{r}
+pvalue_num_mod <- data.frame(matrix(NA, byrow = T, ncol=6, nrow= 1))
+for(i in 7:12){
+  mod_num <- glm(target ~ data_num[,i], data = data_num, family = binomial(link = "logit"))
+  pvalue_num_mod[,i-6] <- coef(summary(mod_num))[2,4]
+}
+
+pvalue_num_mod <- t(pvalue_num_mod)
+
+pvalue_fac_mod <- data.frame(matrix(NA, byrow = T, ncol=8, nrow= 3))
+for(i in 1:7){
+  mod_fac <- glm(target ~ data_fac[,i], data = data_fac, family = binomial(link = "logit"))
+  pvalue_fac_mod[1,i] <- coef(summary(mod_fac))[2,4]
+  
+  if(length(levels(data_fac[,i])) > 2)
+  {
+    pvalue_fac_mod[2,i] <- coef(summary(mod_fac))[3,4]
+  }
+  else if (length(levels(data_fac[,i])) > 3)
+  {
+    pvalue_fac_mod[3,i] <- coef(summary(mod_fac))[4,4]
+  }
+}
+
+pvalue_fac_mod <- t(pvalue_fac_mod)
+```
+
+```{r}
+library(tidyverse)
+
+variable_num <- c(names(data_num[7:12]))
+variable_num <- as.data.frame(variable_num)
+tabla_pvalues_num <- cbind(variable_num,pvalue_num, pvalue_num_mod)
+
+variable_fac <- c(names(data_fac))
+variable_fac <- as.data.frame(variable_fac)
+tabla_pvalues_fac <- cbind(variable_fac,pvalue_fac, pvalue_fac_mod)
+
+#Representación de p-valores de las variables numéricas
+
+ggplot(tabla_pvalues_num, aes(x = variable_num, y = pvalue_num)) +
+         geom_point()
+
+ggplot(tabla_pvalues_num, aes(x = variable_num, y = pvalue_num_mod)) +
+         geom_point()
+
+#Representación de p-valores de las variables categóricas
+
+ggplot(tabla_pvalues_fac, aes(x = variable_fac, y = pvalue_fac)) +
+         geom_point()
+
+ggplot(tabla_pvalues_fac, aes(x = variable_fac, y = tabla_pvalues_fac$`1`)) +
+         geom_point()
+
+ggplot(tabla_pvalues_fac, aes(x = variable_fac, y = tabla_pvalues_fac$`2`)) +
+         geom_point()
+
+ggplot(tabla_pvalues_fac, aes(x = variable_fac, y = tabla_pvalues_fac$`3`)) +
+         geom_point()
+```
