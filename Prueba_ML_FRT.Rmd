@@ -1,0 +1,516 @@
+---
+title: "Prueba_ML"
+author: "Federico Rodríguez"
+date: "2023-03-7"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Link a Github
+
+<https://github.com/federgz20/ml_class.git>
+
+## Importar datos y cargar paquetes
+
+Vamos a utilizar la librería tidyverse para hacer gráficos con ggplot. Empezamos cargando los datos de entrenamiento y haciendo un pequeño resumen, para ver qué tipos de variables tenemos y de qué clase son, valores mínimos y máximos (nos puede dar una primera idea de outlayers).
+
+De forma complementaria, nos fijamos en el archivo informativo para ver cuántas observaciones positivas (codificadas con un 4) y negativas (codificadas con un 2) tenemos de la variable Class (última variable) que refiere a padecer Breast cancer o no. En este archivo también se nos explica que la primera columna corresponde con una varible con un ID de cada paciente. El resto de variables (10) serán las variables explicativas (variables independientes) de nuestro modelo, todas ellas tienen un rango del 1 al 10 y refieren a propiedades y características biológicas y clínicas. Por tanto, todas estas variables podemos considerarlas como variables cuantitativas discretas, pues solo pueden tomar valores del 1 al 10. Por último, la penúltima variable Group adquiere valores del 1 al 8, donde cada valor corresponde a un grupo de pacientes, valores tomados en fechas distintas.
+
+Antes de la importación de los datos, podemos hacer una vista previa de los datos y nos damos cuenta que los valores se encuentran separados por \_ y h, por eso, en un editor de texto, previamente a cargar los datos, suprimo los \_ y a la hora de importar indico que el separador es h.
+
+```{r}
+library(tidyverse)
+
+data <- read.csv("C:/Users/feder/OneDrive - alumni.unav.es/Escritorio/Máster/Machine Learning I/Prueba_ML/Breast_Cancer_train.data", sep = "h")
+
+summary(data)
+```
+
+Importamos los datos usados como test, en un editor de texto eliminamos el caracter \\ y usamos como separador /
+
+```{r}
+test_data <- read.csv("C:/Users/feder/OneDrive - alumni.unav.es/Escritorio/Máster/Machine Learning I/Prueba_ML/Breast_Cancer_test.data", sep = "/")
+
+summary(test_data)
+```
+
+## Análisis exploratorio y preprocesado de los datos
+
+### Cambiar nombre de los headers de las columnas
+
+Los nombres de las columnas vienen codificados con nombres que no refieren a ninguna información relevante, por tanto, los cambiamos con los que se nos facilitan en el archivo informativo.
+
+```{r}
+colnames(data) <- c("ID","Clump_Thickness","Uniformity_of_Cell_Size","Uniformity_of_Cell_Shape","Marginal_Adhesion","Single_Epithetial_Cell_Size","Bare_Nuclei","Bland_Chromatin","Normal_Nucleoli","Mitoses","Group","Class")
+
+colnames(test_data) <- c("ID","Clump_Thickness","Uniformity_of_Cell_Size","Uniformity_of_Cell_Shape","Marginal_Adhesion","Single_Epithetial_Cell_Size","Bare_Nuclei","Bland_Chromatin","Normal_Nucleoli","Mitoses","Group")
+
+```
+
+### Cambiar tipo de las variables
+
+Como comentamos anteriormente, vamos a tratar como variables numéricas a todas las variables a excepción de la variable Class, que es una variable categórica binaria. Para ello, cambiamos todas las variables, que no lo estén, a clase numérica. Ciertas variables poseían valores "?", que al cambiarlo a variable numérica, R reemplaza "?" por un NA, lo cual nos conviene.
+
+```{r}
+sapply(data, class)
+
+data$Uniformity_of_Cell_Size <- as.numeric(data$Uniformity_of_Cell_Size)
+data$Uniformity_of_Cell_Shape <- as.numeric(data$Uniformity_of_Cell_Shape)
+data$Marginal_Adhesion <- as.numeric(data$Marginal_Adhesion)
+data$Single_Epithetial_Cell_Size <- as.numeric(data$Single_Epithetial_Cell_Size)
+data$Bare_Nuclei <- as.numeric(data$Bare_Nuclei)
+data$Bland_Chromatin <- as.numeric(data$Bland_Chromatin)
+data$Normal_Nucleoli <- as.numeric(data$Normal_Nucleoli)
+data$Mitoses <- as.numeric(data$Mitoses)
+data$Group <- as.numeric(data$Group)
+```
+
+```{r}
+test_data$Clump_Thickness <- as.numeric(test_data$Clump_Thickness)
+test_data$Uniformity_of_Cell_Size <- as.numeric(test_data$Uniformity_of_Cell_Size)
+test_data$Uniformity_of_Cell_Shape <- as.numeric(test_data$Uniformity_of_Cell_Shape)
+test_data$Marginal_Adhesion <- as.numeric(test_data$Marginal_Adhesion)
+test_data$Single_Epithetial_Cell_Size <- as.numeric(test_data$Single_Epithetial_Cell_Size)
+test_data$Bare_Nuclei <- as.numeric(test_data$Bare_Nuclei)
+test_data$Bland_Chromatin <- as.numeric(test_data$Bland_Chromatin)
+test_data$Normal_Nucleoli <- as.numeric(test_data$Normal_Nucleoli)
+test_data$Mitoses <- as.numeric(test_data$Mitoses)
+test_data$Group <- as.numeric(test_data$Group)
+```
+
+### Modificar datos erróneos y outlayers
+
+Podemos hacer una pequeña tabla para cada variable e ir analizando los distintos valores que toman las variables, todos aquellos que no sean números enteros de 1 a 10, 1 a 8 para la variable Group o 2 ó 4 para la variable Class, serán datos considerados erróneos.
+
+En la medida de lo posible se intentarán corregir manualmente y a los valores vacíos NA se les asignará el valor medio calculado para esa variable (single imputation). Para la variable Class (nuestra variable respuesta) tendremos más precaución, porque un valor de "3" en un variable con valores de "2" y "4" no es posible estimar qué valor le corresponde, por tanto, es más prudente eliminar esa observación del análisis. Esta variable la pasaremos a factor con dos niveles "2" que será "No" y "4" pasará a ser "Yes".
+
+Por último, vamos a eliminar la variable ID, porque no aporta información útil en el estudio.
+
+```{r}
+data$Clump_Thickness[which(data$Clump_Thickness == "100")] <- "10"
+data$Clump_Thickness[which(data$Clump_Thickness == "30")] <- "3" 
+data$Clump_Thickness <- as.numeric(data$Clump_Thickness)
+
+table(data$Clump_Thickness)
+
+data$Uniformity_of_Cell_Size[which(data$Uniformity_of_Cell_Size == 30)] <- 3
+table(data$Uniformity_of_Cell_Size)
+
+data$Uniformity_of_Cell_Shape[which(data$Uniformity_of_Cell_Shape == -7)] <- 7
+data$Uniformity_of_Cell_Shape[which(data$Uniformity_of_Cell_Shape == 80)] <- 8
+class(data$Uniformity_of_Cell_Shape)
+table(data$Uniformity_of_Cell_Shape)
+
+data$Marginal_Adhesion[which(data$Marginal_Adhesion == -1)] <- 1
+data$Marginal_Adhesion[which(data$Marginal_Adhesion == 100)] <- 10
+table(data$Marginal_Adhesion)
+
+
+data$Single_Epithetial_Cell_Size[which(data$Single_Epithetial_Cell_Size == 100)] <- 10
+data$Single_Epithetial_Cell_Size[which(data$Single_Epithetial_Cell_Size == 60)] <- 6
+table(data$Single_Epithetial_Cell_Size)
+
+data$Bland_Chromatin[which(data$Bland_Chromatin == 11)] <- 1
+table(data$Bland_Chromatin)
+
+#En la variable Class los valores que valgan 3 o ? les daremos un valor NA, porque no podemos darle un valor con certeza, en una variable que afecta drásticamente el análisis (padecer o no la enfermedad)
+
+data$Class[which(data$Class == "44")] <- "4"
+data$Class[which(data$Class == "20")] <- "2"
+data$Class[which(data$Class == "3")] <- NA
+data$Class[which(data$Class == "?")] <- NA
+
+#Vamos a tratar a la variable Class como factor con dos niveles "No" y "Yes"
+data$Class <- as.factor(data$Class)
+levels(data$Class) <- c("No","Yes")
+table(data$Class)
+
+summary(data)
+
+#Dar el valor medio a los valores NA de las variables
+for(i in 1:ncol(data)){
+  data[is.na(data[,i]), i] <- round(mean(data[,i], na.rm = TRUE))
+}
+
+View(data)
+
+#Eliminar las filas que posean NA en la variable Class
+data_2 <- data[complete.cases(data$Class), ]
+View(data_2)
+
+#Eliminar la primera variable ID
+data_2 <- data_2[,-1]
+```
+
+Limpiar las variables de test_data
+
+```{r}
+test_data <- test_data[,-1]
+
+test_data$Clump_Thickness[which(test_data$Clump_Thickness == 80)] <- 8
+table(test_data$Clump_Thickness)
+
+test_data$Uniformity_of_Cell_Size[which(test_data$Uniformity_of_Cell_Size == 30)] <- 3
+table(test_data$Uniformity_of_Cell_Size)
+
+test_data$Group[which(test_data$Group == 60)] <- 6
+table(test_data$Group)
+
+for(i in 1:ncol(test_data)){
+  test_data[is.na(test_data[,i]), i] <- round(mean(test_data[,i], na.rm = TRUE))
+}
+
+View(test_data)
+```
+
+## Análisis descriptivo
+
+### Estudio de la variable Class
+
+Vamos a comenzar el análisis estudiando nuestra variable respuesta. En nuestros datos de entrenamiento, disponemos de un 65% de las observaciones son negativos para la enfermedad (cáncer de mama), por tanto, el restante son positivos.
+
+```{r}
+
+ggplot(data = data_2, aes(x = Class, y = ..count.., fill = Class)) +
+  geom_bar() +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  labs(title = "Cáncer de mama") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+table(data_2$Class)
+
+prop.table(table(data_2$Class)) %>% round(digits = 2)
+
+n_observaciones <- nrow(data_2)
+predicciones <- rep(x = "No",  n_observaciones)
+mean(predicciones == data_2$Class) * 100
+```
+
+### Análisis bivariante respecto a la variable Class
+
+Comenzamos con el análisis bivariante, un estudio de cada variable explicativa respecto a la variable respuesta. En primer lugar, vamos a elaborar tablas de frecuencias en proporciones para cada variable en función de la variable respuesta, para estudiar la distribución de los datos. Esto lo acompañaremos con gráficos de barras, para tener una representación más clara. Y por último, visualizaremos los datos con boxplots y calcularemos los p-valores mediante un test estadístico de t-student.
+
+Es necesario señalar que los atributos toman valores del 1-10 y se entiende que 1 es un valor pequeño para esa variable y el valor más grande es el 10. Por ejemplo, un valor de Clump Thickness de 1 nos indica que se trata de un bulto pequeño, mientras que un valor de 10 alude a un grosor grande.
+
+Si atendemos a los resultados, podemos observar que prácticamente todas las variables son muy significativas, tanto por los p-valores calculados que son extremadamente pequeños, como por la distribución de los datos que se observa en los plots y tablas de proporción. La gran mayoría de resultados negativos de la variable Class (color gris en los barplots) se concentran en los valores de 1-3, mientras que los positivos (en naranja) si se encuentran mayormente distribuidos por los valores del 1-10, pero con mayor tendencia a los valores superiores 4-10. Cabe destacar que la variable Clump Thickness presenta más variabilidad en sus datos con presencia proporcional relevante de los casos negativos hasta el valor 6. La variable Group presenta una distribución uniforme tanto para casos positivos como negativos de cáncer de mama, esta variable realmente no parece contener información relevante, lo cual tiene sentido, porque únicamente son grupos de pacientes por fecha de recogida de datos.
+
+Confirmamos con un prueba de Shapiro-Wilks la normalidad de nuestros datos, aunque ya a simple vista es posible intuir que ninguna variable sigue esta distribución. Se rechazó la hipótesis nula para todas las variables, corroborando que ninguna variable sigue una distribución normal. Esto lo tendremos en cuenta a la hora de modelar, en vez de hacer un modelo de regresión lineal, utilizaremos un modelo de regresión lineal generalizado.
+
+A primera vista estos gráficos parecen indicarnos que todas las variables explicativas resultan significativas frente a nuestra variable respuesta, por tanto, hay que continuar con un análisis multivariante, para ver si realmente es así e incluso detectar posible multicolinealidad de las variables independientes.
+
+```{r}
+prop_list <- list()
+
+for (i in 1:10) {
+  prop <- prop.table(table(data_2[,i], data_2$Class), margin = 1) %>% round(digits = 2)
+  prop_list[[i]] <- prop
+  
+  ggplot(data = data_2, aes(x = data_2[,i], y = ..prop.., fill = Class)) +
+    geom_bar() +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2)[i])) +
+    theme_bw() +
+    theme(legend.position = "bottom")
+}
+print(prop_list)
+```
+
+```{r, echo=FALSE}
+
+#No he conseguido con un bucle for o con la librería gridExtra representar los 10 gráficos en un código resumido
+#ggplot no funciona bien con el bucle for, usando R base sí funciona correctamente
+
+#Por tanto, tengo que hacerlo uno a uno
+
+ggplot(data = data_2, aes(x = data_2$Clump_Thickness, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Clump_Thickness))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Uniformity_of_Cell_Size, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Uniformity_of_Cell_Size))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Uniformity_of_Cell_Shape, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Uniformity_of_Cell_Shape))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Marginal_Adhesion, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Marginal_Adhesion))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Single_Epithetial_Cell_Size, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Single_Epithetial_Cell_Size))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Bare_Nuclei, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Bare_Nuclei))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Bland_Chromatin, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Bland_Chromatin))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Normal_Nucleoli, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Normal_Nucleoli))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Mitoses, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Mitoses))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+
+ggplot(data = data_2, aes(x = data_2$Group, y = ..prop.., fill = Class)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = c("gray50", "orangered2")) +
+    labs(title = paste(colnames(data_2$Group))) +
+    theme_bw() +
+    theme(legend.position = "bottom")+
+    scale_x_continuous(breaks = 1:10)
+```
+
+```{r,fig.height=6, fig.width=6}
+
+#Vamos a empezar viendo si nuestras variables siguen una distribución normal
+
+resultados_shapiro <- vector("numeric", length = 10)
+
+for (i in 1:10) {
+  resultados_shapiro[i] <- shapiro.test(data_2[,i])$p.value
+}
+
+print(resultados_shapiro)
+
+#Todos los p-valores son significativos, se rechaza la hipótesis nula, nuestras variables explicativas no siguen una distribución normal. Por tanto, a la hora de moodelar optaremos por un modelo lineal generalizado, que son precisamente útiles cuando los supuestos de normalidad y homocedasticidad no se cumplen.
+
+par(mfrow=c(4,3), mar=c(2, 2, 1, 1))
+
+pvalue <- matrix(NA, nrow = 1, ncol = 10)
+
+for(i in 1:10)
+  {
+  boxplot(data_2[,i] ~ data_2$Class, data = data_2,
+          main = paste(colnames(data_2[i])),
+          ylim = c(1,10), names = c("No","Yes"), xlab = "Heart Disease")
+  pvalue[,i] <- t.test(data_2[,i] ~ data_2$Class)$p.value
+}
+
+```
+
+## Modelado
+
+Comenzamos haciendo un modelo de regresión lineal generalizado, utilizando todas las variables y como familia de distribución la binomial (la variable respuesta es dicotómica).
+
+```{r}
+mod_multivar <- glm(Class ~ ., data = data_2, family = binomial(link = "logit"))
+
+summary(mod_multivar)
+
+```
+
+Vamos a suprimir del modelo aquellas variables que tengan un p-valor superior a 0.20 (Uniformity_of_Cell_Size, Uniformity_of_Cell_Shape, Single_Epithetial_Cell_Size, Group)
+
+```{r}
+mod_multivar2 <- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli+Mitoses, data = data_2, family = binomial(link = "logit"))
+
+summary(mod_multivar2)
+```
+
+Eliminamos aquellas variables que tienen un p-valor superior a 0.05 (Mitoses). En este punto, las variables restantes ya tienen un p-valor significativo muy pequeño.
+
+```{r}
+mod_multivar3 <- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = data_2, family = binomial(link = "logit"))
+
+summary(mod_multivar3)
+```
+
+### Evaluación y entrenamiento del modelo por resampling
+
+En este punto, vamos a evaluar el modelo generado mediante un resampling de 5 fold, realizamos entrenamientos y predicciones de nuestro training data. De esta forma, obtendremos unos coeficientes de predicción por cada entrenamiento, que al final promediaremos y se lo asignaremos a nuestro modelo final, para, finalmente, realizar una predicción sobre el data_test dado.
+
+```{r}
+training_data= data_2
+
+#Train 1
+vec_all <- 1:nrow(training_data)
+sample1 <- sample(vec_all, 110) #El 20% de 553
+train1 <- training_data[-sample1,]
+test1 <- training_data[sample1,]
+
+mod_train1<- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = train1, family = binomial(link = "logit"))
+
+predic1 <- predict(mod_train1, type = "response", newdata = test1)
+#plot(sort(predic), type = "l")
+table(ifelse(predic1 < 0.5, 0, 1))
+
+coef1 <- coef(mod_train1)
+
+#Train 2
+
+vec_all2 <- vec_all[-sample1] #Le quitas el 20% de datos usados anteriormente
+sample2 <- sample(vec_all2, 110) 
+train2 <- training_data[-sample2,]
+test2 <- training_data[sample2,]
+
+mod_train2<- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = train2, family = binomial(link = "logit"))
+
+predic <- predict(mod_train2, type = "response", newdata = test2)
+#plot(sort(predic), type = "l")
+table(ifelse(predic < 0.5, 0, 1))
+coef2 <- coef(mod_train2)
+
+#Train3 
+
+sample1_2 <- c(sample1, sample2)
+vec_all3 <- vec_all[-sample1_2] #Le quitas el 40% de datos usados anteriormente
+sample3 <- sample(vec_all3, 110) 
+train3 <- training_data[-sample3,]
+test3 <- training_data[sample3,]
+
+mod_train3<- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = train3, family = binomial(link = "logit"))
+
+predic3 <- predict(mod_train3, type = "response", newdata = test3)
+#plot(sort(predic3), type = "l")
+table(ifelse(predic3 < 0.5, 0, 1))
+coef3 <- coef(mod_train3)
+
+#Train4
+
+sample1_2_3 <- c(sample1_2, sample3)
+vec_all4 <- vec_all[-sample1_2_3] #Le quitas el 60% de datos usados anteriormente
+sample4 <- sample(vec_all4, 110) 
+train4 <- training_data[-sample4,]
+test4 <- training_data[sample4,]
+
+mod_train4<- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = train4, family = binomial(link = "logit"))
+
+predic4 <- predict(mod_train4, type = "response", newdata = test4)
+#plot(sort(predic4), type = "l")
+table(ifelse(predic4 < 0.5, 0, 1))
+coef4 <- coef(mod_train4)
+
+#Train5
+sample1_2_3_4 <- c(sample1_2_3, sample4)
+vec_all5 <- vec_all[-sample1_2_3_4] #Le quitas el 80% de datos usados anteriormente
+sample5 <- sample(vec_all5, 110) 
+train5 <- training_data[-sample5,]
+test5 <- training_data[sample5,]
+
+mod_train5<- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = train5, family = binomial(link = "logit"))
+
+predic5 <- predict(mod_train5, type = "response", newdata = test5)
+
+table(ifelse(predic5 < 0.5, 0, 1))
+coef5 <- coef(mod_train5)
+
+# Calcular el promedio de los coeficientes
+coef_avg <- (coef1 + coef2 + coef3 + coef4 + coef5) / 5
+
+# Asignar los coeficientes promedio al modelo final
+mod_final <- glm(Class ~ Clump_Thickness+Marginal_Adhesion+Bare_Nuclei+Bland_Chromatin+Normal_Nucleoli, data = training_data, family = binomial(link = "logit"))
+
+mod_final$coefficients <- coef_avg
+```
+
+A modo de ejemplo, usando los datos de la primera predicción, podemos hacer una tabla de contingencia con los verdaderos positivos y negativos, así como los falsos positivos y negativos. Además, podemos calcular parámetros de sensibilidad, especificidad, precisión... Por último, podríamos llegar a plotear la curva ROC.
+
+```{r}
+prediccion1 <- ifelse(predic1 < 0.5, 0, 1)
+real1 <- test1$Class
+real1 <- as.character(real1)
+real1 <- ifelse(real1 == "No", 0, 1)
+tabla_predic1 <- table(real1,prediccion1)
+
+tp <- tabla_predic1[2, 2]
+tn <- tabla_predic1[1, 1]
+fp <- tabla_predic1[1, 2]
+fn <- tabla_predic1[2, 1]
+
+tabla_resultados <- data.frame(
+  "Verdaderos positivos" = tp,
+  "Verdaderos negativos" = tn,
+  "Falsos positivos" = fp,
+  "Falsos negativos" = fn)
+
+rownames(tabla_resultados) <- NULL
+
+# Calcular la precisión
+precision <- tabla_predic1[2,2] / (tabla_predic1[2,2] + tabla_predic1[1,2])
+precision
+
+# Calcular la sensibilidad 
+sensibilidad <- tabla_predic1[2,2] / (tabla_predic1[2,2] + tabla_predic1[2,1])
+sensibilidad
+
+# Calcular la exactitud 
+exactitud <- (tabla_predic1[1,1] + tabla_predic1[2,2]) / sum(tabla_predic1)
+exactitud
+
+# Calcular la especificidad
+especificidad <-  tabla_predic1[1, 1] / (tabla_predic1[1, 1] + tabla_predic1[2, 1])
+especificidad
+
+# Calcular el FDR
+FDR <- tabla_predic1[1, 2] / (tabla_predic1[1, 2] + tabla_predic1[2,2])
+FDR
+```
+
+### Predicción en test_data
+
+En este punto, vamos a realizar una predicción sobre el test_data ya con los datos pre-procesados y utilizando el modelo final.
+
+Hacemos una tabla recogiendo los resultados obtenidos, clasificándolos en 0 y 1, sacamos los porcentajes de 0 y 1. Este resultado podemos compararlo con los datos que poseíamos de training_data donde el 65% aproximadamente eran benignos y el 35% de los pacientes poseían un tumor maligno. En este caso, hemos obtenido un 64,7% de benignos, lo que se ajuste enormemente a la proporción obtenida en los datos de entrenamiento.
+
+```{r}
+predic_final <- predict(mod_final, type = "response", newdata = test_data)
+
+predic_final
+
+prediccion <- ifelse(predic_final < 0.5, 0, 1)
+prediccion
+
+table_prediccion <- table(prediccion)
+table_prediccion
+
+total <- length(prediccion)
+porcentaje_0 <- table_prediccion[1] / total * 100
+porcentaje_1 <- table_prediccion[2] / total * 100
+```
